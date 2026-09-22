@@ -1,0 +1,15 @@
+services:
+  app:
+    build: .
+    ports:
+      - "3000:3000"
+    volumes:
+      # Persists data/clinic.db across restarts and rebuilds — without this, every deploy
+      # would silently start with an empty clinic (no accounts, no bookings, nothing).
+      - clinic-data:/app/data
+    environment:
+      NODE_ENV: production
+    restart: unless-stopped
+
+volumes:
+  clinic-data:
