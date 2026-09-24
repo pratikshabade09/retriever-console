@@ -212,6 +212,17 @@ export function reduce(state: EngineState, event: Event): EngineState {
     case "PatientRegistered":
       return { ...state, patients: { ...state.patients, [event.patientId]: { id: event.patientId, name: event.name, phone: event.phone } } };
 
+    case "DoctorRegistered": {
+      const templates = { ...state.sessionTemplates };
+      for (const template of event.templates) templates[template.id] = template;
+      return {
+        ...state,
+        doctors: { ...state.doctors, [event.doctorId]: { id: event.doctorId, name: event.name, specialty: event.specialty, room: event.room } },
+        sessionTemplates: templates,
+        feeHistory: [...state.feeHistory, { doctorId: event.doctorId, fee: event.consultationFee, effectiveFrom: event.effectiveFrom }],
+      };
+    }
+
     case "AppointmentBooked": {
       const appointment: Appointment = {
         id: event.appointmentId,
@@ -522,6 +533,8 @@ export function reduce(state: EngineState, event: Event): EngineState {
         ts: event.ts,
         tokenNumber: event.tokenNumber,
         patientId: event.patientId,
+        appointmentId: event.appointmentId ?? null,
+        visitId: event.visitId ?? null,
         kind: event.kind,
         message: event.message,
         delivered: true,

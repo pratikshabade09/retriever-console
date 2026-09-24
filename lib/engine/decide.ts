@@ -18,6 +18,7 @@ import { recomputeOpdForDoctor } from "./opd";
 import { buildInvoiceLines, currentFee } from "./money";
 import { dateToAbsoluteMinutes, weekdayOfDate, formatClockLabel } from "./time";
 import { buildSessionSlots } from "./sessionSlots";
+import { defaultTemplatesFor } from "./seed";
 import {
   CapacityFloorReached,
   DoctorBusy,
@@ -166,6 +167,40 @@ export function decide(command: Command, state: EngineState, now: number): Event
     case "RegisterPatient": {
       const patientId = makeId(state, "patient");
       return [{ ...base, type: "PatientRegistered", aggregateType: "Patient", aggregateId: patientId, patientId, name: command.name, phone: command.phone }];
+    }
+
+    case "RegisterDoctor": {
+      if (command.actorRole !== "ADMIN") throw new UnauthorizedCommand("Only admin can register a doctor");
+
+      const name = command.name.trim();
+      const specialty = command.specialty.trim();
+      const room = command.room.trim();
+      if (!name) throw new DomainError("A doctor needs a name");
+      if (!specialty) throw new DomainError("A doctor needs a specialty");
+      if (!room) throw new DomainError("A doctor needs a room");
+      if (!Number.isFinite(command.consultationFee) || command.consultationFee < 0) {
+        throw new DomainError("Consultation fee must be a non-negative number");
+      }
+
+      const clash = Object.values(state.doctors).find((d) => d.name.toLowerCase() === name.toLowerCase());
+      if (clash) throw new DomainError(`${clash.name} is already in the clinic`);
+
+      const doctorId = makeId(state, "doctor");
+      return [
+        {
+          ...base,
+          type: "DoctorRegistered",
+          aggregateType: "Doctor",
+          aggregateId: doctorId,
+          doctorId,
+          name,
+          specialty,
+          room,
+          consultationFee: command.consultationFee,
+          effectiveFrom: now,
+          templates: defaultTemplatesFor(doctorId),
+        },
+      ];
     }
 
     case "BookAppointment": {
@@ -725,6 +760,8 @@ export function decide(command: Command, state: EngineState, now: number): Event
           notificationId,
           tokenNumber: appt.tokenNumber,
           patientId: appt.patientId,
+          appointmentId: appt.id,
+          visitId: null,
           kind: "morning_reminder",
           message: "Good morning. This is your appointment reminder. Please be ready around your likely OPD time.",
         },

@@ -19,6 +19,15 @@ import { formatClockLabel } from "./time";
 const OPD_CHANGE_THRESHOLD_MINUTES = 5;
 const APPROACHING_QUEUE_POSITION = 5;
 
+/** Who a notification is about. The token number is what the patient sees, but it repeats every
+ * clinic day — the ids are what actually identify the booking, so they travel with the event. */
+interface NotificationSubject {
+  tokenNumber: number;
+  patientId: string;
+  appointmentId: string | null;
+  visitId: string | null;
+}
+
 export function ewmaConsultMinutesFor(state: EngineState, doctorId: string, fallback: number): number {
   return state.ewmaConsultMinutes[doctorId] ?? fallback;
 }
@@ -96,7 +105,8 @@ export function recomputeOpdForDoctor(params: {
   let opdExtra = 0;
   let notifExtra = 0;
 
-  function emitChange(tokenNumber: number, patientId: string, newTime: number, initialExpectation: number) {
+  function emitChange(subject: NotificationSubject, newTime: number, initialExpectation: number) {
+    const { tokenNumber, patientId } = subject;
     const baseline = baselineOpdTime(state, tokenNumber, initialExpectation);
     const delta = newTime - baseline;
     if (Math.abs(delta) < OPD_CHANGE_THRESHOLD_MINUTES) return;
@@ -136,6 +146,8 @@ export function recomputeOpdForDoctor(params: {
       notificationId,
       tokenNumber,
       patientId,
+      appointmentId: subject.appointmentId,
+      visitId: subject.visitId,
       kind: "opd_time_changed",
       message,
     });
@@ -143,7 +155,11 @@ export function recomputeOpdForDoctor(params: {
 
   for (const appointment of Object.values(state.appointments)) {
     if (appointment.doctorId !== doctorId || appointment.status !== "BOOKED") continue;
-    emitChange(appointment.tokenNumber, appointment.patientId, likelyOpdTimeBeforeArrival(state, appointment, now), appointment.slotTime);
+    emitChange(
+      { tokenNumber: appointment.tokenNumber, patientId: appointment.patientId, appointmentId: appointment.id, visitId: null },
+      likelyOpdTimeBeforeArrival(state, appointment, now),
+      appointment.slotTime,
+    );
   }
 
   for (const entry of Object.values(state.queueEntries)) {
@@ -151,13 +167,18 @@ export function recomputeOpdForDoctor(params: {
     const visit = state.visits[entry.visitId];
     if (!visit) continue;
 
-    emitChange(visit.tokenNumber, visit.patientId, likelyOpdTimeForQueueEntry(state, entry, now, fallbackConsultMinutes), entry.effectiveReadyTime);
+    const subject: NotificationSubject = {
+      tokenNumber: visit.tokenNumber,
+      patientId: visit.patientId,
+      appointmentId: visit.appointmentId,
+      visitId: visit.id,
+    };
+    emitChange(subject, likelyOpdTimeForQueueEntry(state, entry, now, fallbackConsultMinutes), entry.effectiveReadyTime);
 
     const position = patientsAhead(state, entry.id);
     if (position <= APPROACHING_QUEUE_POSITION) {
-      const alreadyNotified = state.notifications.some(
-        (n) => n.kind === "approaching_queue" && n.tokenNumber === visit.tokenNumber,
-      );
+      // Once per visit, not once per token number — one visit, one "you're next".
+      const alreadyNotified = state.notifications.some((n) => n.kind === "approaching_queue" && n.visitId === visit.id);
       if (!alreadyNotified) {
         const notificationId = makeId(state, "notif", notifExtra++);
         events.push({
@@ -169,8 +190,10 @@ export function recomputeOpdForDoctor(params: {
           aggregateId: notificationId,
           v: 1,
           notificationId,
-          tokenNumber: visit.tokenNumber,
-          patientId: visit.patientId,
+          tokenNumber: subject.tokenNumber,
+          patientId: subject.patientId,
+          appointmentId: subject.appointmentId,
+          visitId: subject.visitId,
           kind: "approaching_queue",
           message: `You are approaching the queue. There are ${position} patients ahead of you. Please be ready.`,
         });

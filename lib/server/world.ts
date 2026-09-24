@@ -11,9 +11,14 @@ import { decide } from "@/lib/engine/decide";
 import { dateToAbsoluteMinutes } from "@/lib/engine/time";
 import { authorize } from "./authorize";
 import { appendEvents, loadAllEvents, resetStore } from "./store";
+import { seedDemoHistoryIfEmpty } from "./demoSeed";
 import { schedulerCommandsForTick } from "./scheduler";
 
 const SCHEDULER_INTERVAL_MS = 20_000;
+
+/** Next imports every route module during `next build` to collect its metadata, which would
+ * otherwise open/create the SQLite file on whatever machine happens to be running the build. */
+const IS_BUILD_PHASE = process.env.NEXT_PHASE === "phase-production-build";
 
 interface World {
   state: EngineState;
@@ -36,6 +41,10 @@ export function nowInAbsoluteMinutes(): number {
 }
 
 function freshWorld(): World {
+  // Prototype nicety: a brand-new database gets the demo patient's small history (see
+  // demoSeed.ts). Guarded to a first run against an empty log, so a clinic with real data is
+  // never touched, and skipped during `next build` for the same reason the scheduler is.
+  if (!IS_BUILD_PHASE) seedDemoHistoryIfEmpty(nowInAbsoluteMinutes());
   const events = loadAllEvents();
   const state = events.reduce(reduce, createInitialState());
   return { state, timer: null };
@@ -100,11 +109,12 @@ function ensureSchedulerRunning(): void {
 // "play" button, it's just running. Except during `next build`: Next imports every route
 // module to collect its metadata, which would otherwise open/create the SQLite file (and
 // start a real interval) at build time, on whatever machine happens to be running the build.
-if (process.env.NEXT_PHASE !== "phase-production-build") {
+if (!IS_BUILD_PHASE) {
   ensureSchedulerRunning();
 }
 
-/** Dev/test only — never wired to a route. Wipes the log and rebuilds an empty world. */
+/** Dev/test only — never wired to a route. Wipes the log and rebuilds the world, which — the
+ * log now being empty again — re-seeds the demo history. */
 export function resetWorld(): void {
   resetStore();
   globalThis.__retrieverConsoleWorld__ = freshWorld();

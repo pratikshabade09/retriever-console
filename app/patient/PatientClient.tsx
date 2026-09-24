@@ -30,9 +30,14 @@ interface BookingResult {
 }
 
 interface AppointmentView {
+  appointmentId: string | null;
+  visitId: string | null;
   tokenNumber: number;
   status: string;
   doctorName: string;
+  dayLabel: string;
+  /** Past the appointment's own day — its updates are history, so we don't show them. */
+  dayPassed: boolean;
   slotLabel: string;
   likelyOpdTime: string;
   patientsAhead: number;
@@ -43,9 +48,35 @@ interface Notification {
   ts: number;
   kind: string;
   message: string;
+  /** Which booking it belongs to — appointmentId for a booking, visitId for a walk-in. */
+  appointmentId: string | null;
+  visitId: string | null;
 }
 
 type Step = "welcome" | "symptom" | "doctors" | "slots" | "form" | "confirmation" | "mine";
+
+/** Steps that can be restored from a URL. `slots`, `form` and `confirmation` can't: they depend
+ * on a doctor / slot / booking held in memory for the visit in progress, not on stored data, so
+ * a refresh there has nothing to restore and falls back to their bookings. */
+const RESTORABLE_STEPS: Step[] = ["welcome", "symptom", "doctors", "mine"];
+
+function stepFromUrl(): Step | null {
+  if (typeof window === "undefined") return null;
+  const raw = new URLSearchParams(window.location.search).get("step");
+  return RESTORABLE_STEPS.find((s) => s === raw) ?? null;
+}
+
+/** This patient's bookings and their updates. Both come from the server — the browser keeps no
+ * copy, so signing in always shows the same thing as the clinic sees. */
+async function fetchMyBookings(): Promise<{ appointments: AppointmentView[]; notifications: Notification[] }> {
+  const [appointmentsRes, notificationsRes] = await Promise.all([
+    fetch("/api/patient/appointments"),
+    fetch("/api/patient/notifications?since=0"),
+  ]);
+  const appointmentsData = await appointmentsRes.json();
+  const notificationsData = await notificationsRes.json();
+  return { appointments: appointmentsData.appointments ?? [], notifications: notificationsData.notifications ?? [] };
+}
 
 function nextSevenDays(): { date: string; label: string }[] {
   return Array.from({ length: 7 }, (_, i) => {
@@ -78,6 +109,7 @@ export default function PatientClient({ patient }: { patient: PatientAccount }) 
   const [bookingNotifications, setBookingNotifications] = useState<Notification[]>([]);
 
   const [myAppointments, setMyAppointments] = useState<AppointmentView[] | null>(null);
+  const [myNotifications, setMyNotifications] = useState<Notification[]>([]);
 
   useEffect(() => {
     fetch("/api/public/doctors")
@@ -98,20 +130,48 @@ export default function PatientClient({ patient }: { patient: PatientAccount }) 
   }, [selectedDoctor, selectedDate]);
 
   useEffect(() => {
+    // One-time restore. Put them back on the step the URL names, or — when they already have
+    // bookings — open on those instead of walking the booking flow again from the start.
+    void fetchMyBookings()
+      .then(({ appointments, notifications }) => {
+        setMyAppointments(appointments);
+        setMyNotifications(notifications);
+        const fromUrl = stepFromUrl();
+        if (fromUrl) setStep(fromUrl);
+        else if (appointments.length > 0) setStep("mine");
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    // Keep the step in the URL so a refresh, or a link, lands on the same screen. Replaced
+    // rather than pushed — Back shouldn't re-open every step passed through.
+    const url = new URL(window.location.href);
+    if (step === "welcome") url.searchParams.delete("step");
+    else url.searchParams.set("step", step);
+    window.history.replaceState(null, "", url);
+  }, [step]);
+
+  useEffect(() => {
     if (!booking) return;
-    const id = setInterval(() => {
-      fetch(`/api/public/notifications/${booking.tokenNumber}?since=0`)
+    // The signed-in patient's own feed, then narrowed to this booking by id — a token number
+    // alone also matches an older booking that held the same token on another day.
+    const load = () =>
+      fetch("/api/patient/notifications?since=0")
         .then((r) => r.json())
-        .then(setBookingNotifications)
+        .then((data: { notifications?: Notification[] }) => {
+          setBookingNotifications((data.notifications ?? []).filter((n) => n.appointmentId === booking.appointmentId));
+        })
         .catch(() => {});
-    }, 5000);
+    void load();
+    const id = setInterval(load, 5000);
     return () => clearInterval(id);
   }, [booking]);
 
   async function loadMyAppointments() {
-    const res = await fetch("/api/patient/appointments");
-    const data = await res.json();
-    setMyAppointments(data.appointments ?? []);
+    const { appointments, notifications } = await fetchMyBookings();
+    setMyAppointments(appointments);
+    setMyNotifications(notifications);
   }
 
   async function runTriage() {
@@ -151,10 +211,11 @@ export default function PatientClient({ patient }: { patient: PatientAccount }) 
 
   async function payNow() {
     if (!booking) return;
+    // Addressed by appointment id, not token number: token numbers repeat every clinic day.
     const res = await fetch("/api/public/pay", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ tokenNumber: booking.tokenNumber }),
+      body: JSON.stringify({ appointmentId: booking.appointmentId }),
     });
     if (res.ok) setPaymentStatus("PREPAID");
   }
@@ -178,6 +239,21 @@ export default function PatientClient({ patient }: { patient: PatientAccount }) 
           Log out
         </button>
       </div>
+
+      {/* Always offer a way out of whatever screen they're on: back to the dashboard from
+          anywhere, and straight into booking from the two screens that don't start one. */}
+      {step !== "welcome" && (
+        <div style={{ width: "100%", maxWidth: 480, display: "flex", gap: 8, alignItems: "center", marginBottom: 10 }}>
+          <button className="btn btn-sm" onClick={() => setStep("welcome")}>
+            ← Dashboard
+          </button>
+          {(step === "mine" || step === "confirmation") && (
+            <button className="btn btn-sm btn-primary" onClick={() => setStep("doctors")}>
+              Book an appointment
+            </button>
+          )}
+        </div>
+      )}
 
       <div className="patient-header">
         <h1>Retriever Clinic</h1>
@@ -398,41 +474,58 @@ export default function PatientClient({ patient }: { patient: PatientAccount }) 
 
         {step === "mine" && (
           <>
-            <span className="back-link" onClick={() => setStep("welcome")}>
-              ← Back
-            </span>
             {myAppointments === null && <div className="empty">Loading…</div>}
             {myAppointments?.length === 0 && <div className="empty">You haven&apos;t booked anything yet.</div>}
-            {myAppointments?.map((a) => (
-              <div key={a.tokenNumber} className="row" style={{ display: "block" }}>
-                <div style={{ display: "flex", justifyContent: "space-between" }}>
-                  <span className="row-token mono">#{a.tokenNumber}</span>
-                  <span>{a.status}</span>
+            {myAppointments?.map((a) => {
+              // Matched by id, not token number: the same patient can hold the same token twice.
+              const updates = myNotifications.filter((n) =>
+                a.appointmentId ? n.appointmentId === a.appointmentId : n.visitId === a.visitId,
+              );
+              return (
+                <div key={a.appointmentId ?? a.visitId ?? `token-${a.tokenNumber}`} className="row" style={{ display: "block" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between" }}>
+                    <span className="row-token mono">#{a.tokenNumber}</span>
+                    <span>{a.status}</span>
+                  </div>
+                  <div style={{ fontSize: 12 }}>
+                    {a.doctorName} · {a.dayLabel} {a.slotLabel}
+                  </div>
+                  <div className="muted mono" style={{ fontSize: 11 }}>
+                    likely OPD {a.likelyOpdTime} · {a.patientsAhead} ahead · {a.paymentStatus}
+                  </div>
+
+                  {!a.dayPassed && updates.length > 0 && (
+                    <div style={{ marginTop: 6 }}>
+                      <div className="dim" style={{ fontSize: 10, marginBottom: 2 }}>
+                        Updates
+                      </div>
+                      {updates.map((n, i) => (
+                        <div key={i} className="muted" style={{ fontSize: 11 }}>
+                          {n.message}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {a.status === "BOOKED" && a.appointmentId && (
+                    <button
+                      className="btn btn-sm btn-danger"
+                      style={{ marginTop: 6 }}
+                      onClick={async () => {
+                        await fetch("/api/public/cancel", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ appointmentId: a.appointmentId }),
+                        });
+                        await loadMyAppointments();
+                      }}
+                    >
+                      Cancel
+                    </button>
+                  )}
                 </div>
-                <div style={{ fontSize: 12 }}>
-                  {a.doctorName} · {a.slotLabel}
-                </div>
-                <div className="muted mono" style={{ fontSize: 11 }}>
-                  likely OPD {a.likelyOpdTime} · {a.patientsAhead} ahead · {a.paymentStatus}
-                </div>
-                {a.status === "BOOKED" && (
-                  <button
-                    className="btn btn-sm btn-danger"
-                    style={{ marginTop: 6 }}
-                    onClick={async () => {
-                      await fetch("/api/public/cancel", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ tokenNumber: a.tokenNumber }),
-                      });
-                      await loadMyAppointments();
-                    }}
-                  >
-                    Cancel
-                  </button>
-                )}
-              </div>
-            ))}
+              );
+            })}
           </>
         )}
       </div>

@@ -1,36 +1,19 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 
 const ROLE_HOME: Record<string, string> = { RECEPTION: "/reception", DOCTOR: "/doctor", ADMIN: "/admin" };
-
-interface DoctorOption {
-  id: string;
-  name: string;
-  specialty: string;
-}
 
 export default function RegisterPage() {
   const router = useRouter();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [role, setRole] = useState<"RECEPTION" | "DOCTOR" | "ADMIN">("RECEPTION");
-  const [doctorId, setDoctorId] = useState("");
-  const [doctors, setDoctors] = useState<DoctorOption[]>([]);
+  const [role, setRole] = useState<"RECEPTION" | "ADMIN">("RECEPTION");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-
-  useEffect(() => {
-    fetch("/api/public/doctors")
-      .then((r) => r.json())
-      .then((rows: DoctorOption[]) => {
-        setDoctors(rows);
-        if (rows.length > 0) setDoctorId(rows[0].id);
-      })
-      .catch(() => {});
-  }, []);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -40,7 +23,7 @@ export default function RegisterPage() {
       const res = await fetch("/api/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email, password, role, doctorId: role === "DOCTOR" ? doctorId : null }),
+        body: JSON.stringify({ name, email, password, role }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -98,25 +81,9 @@ export default function RegisterPage() {
             </svg>
             <select value={role} onChange={(e) => setRole(e.target.value as typeof role)}>
               <option value="RECEPTION">Reception</option>
-              <option value="DOCTOR">Doctor</option>
               <option value="ADMIN">Admin</option>
             </select>
           </div>
-
-          {role === "DOCTOR" && (
-            <div className="glass-field">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#16241a" strokeWidth="2">
-                <path d="M12 2v6M12 22v-6M4.9 4.9l4.2 4.2M14.9 14.9l4.2 4.2M2 12h6M16 12h6M4.9 19.1l4.2-4.2M14.9 9.1l4.2-4.2" />
-              </svg>
-              <select value={doctorId} onChange={(e) => setDoctorId(e.target.value)} required>
-                {doctors.map((d) => (
-                  <option key={d.id} value={d.id}>
-                    {d.name} — {d.specialty}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
 
           <button className="glass-btn" type="submit" disabled={submitting} style={{ marginTop: 6 }}>
             {submitting ? "Creating account…" : "Register"}
@@ -125,6 +92,12 @@ export default function RegisterPage() {
 
         <div className="glass-footer">
           Already have an account? <a href="/login">Sign in</a>
+        </div>
+        <div className="glass-footer">
+          Doctor? An admin creates your account from the admin panel.
+        </div>
+        <div className="glass-footer">
+          <Link href="/">← Back to the homepage</Link>
         </div>
       </div>
     </div>

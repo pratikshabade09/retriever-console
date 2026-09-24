@@ -1,7 +1,8 @@
 "use client";
 
 // Thin fetch wrappers. No domain logic — every mutation goes through /api/staff/command,
-// which is the HTTP boundary in front of decide().
+// which is the HTTP boundary in front of decide(). The server takes the actor from the session
+// cookie, not from these payloads, so any actorRole/actorId a caller sends is ignored.
 
 import type { EngineState } from "@/lib/engine/state";
 import type { Event } from "@/lib/engine/events";

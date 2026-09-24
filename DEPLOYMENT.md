@@ -63,11 +63,18 @@ configuration for a single app + a domain name.
 
 ## First run in production
 
-The database starts empty — no seed data, no demo accounts. The three doctors (Dr. Sharma, Dr.
-Iyer, Dr. Khan) and their schedules are fixed configuration (`lib/engine/seed.ts`), not
-something you need to create. Everything else — every staff account, every patient account,
-every booking — gets created the first time someone registers or books, exactly as it would
-running locally.
+The database starts with the demo patient's small history and, once anyone opens a login page,
+the four demo accounts listed in the README (`lib/server/demoSeed.ts` decides both). The three
+initial doctors (Dr. Sharma, Dr. Iyer, Dr. Khan) and their schedules are configuration
+(`lib/engine/seed.ts`), not something you need to create — and an admin can add more doctors at
+runtime from `/admin`, which gives them the same default week and a fee. Everything else — every
+real staff account, every patient account, every booking — gets created the first time someone
+registers or books, exactly as it would running locally.
+
+**Before this carries real data, remove the demo shortcuts**: the Prototype · demo logins panel
+on both login pages (`components/DemoLogins.tsx`), the public `app/api/demo/accounts` route that
+serves it working passwords, `lib/server/demoAccounts.ts`, and the `seedDemoHistoryIfEmpty` call
+in `lib/server/world.ts` (plus `lib/server/demoSeed.ts` itself).
 
 ## Before you push to GitHub
 

@@ -11,11 +11,13 @@ import type {
   CapacitySource,
   PriorityTier,
   ResultFlag,
+  SessionTemplate,
   SlotState,
   VisitStatus,
 } from "./types";
 
 export type AggregateType =
+  | "Doctor"
   | "SessionTemplate"
   | "DoctorSession"
   | "Slot"
@@ -338,6 +340,20 @@ export interface FeeConfigChanged extends EventBase {
   effectiveFrom: number;
 }
 
+/** A doctor joined the clinic. Carries their default week of session templates: without them
+ * no slot could ever be opened for them, so the templates are part of the same fact. */
+export interface DoctorRegistered extends EventBase {
+  type: "DoctorRegistered";
+  aggregateType: "Doctor";
+  doctorId: string;
+  name: string;
+  specialty: string;
+  room: string;
+  consultationFee: number;
+  effectiveFrom: number;
+  templates: SessionTemplate[];
+}
+
 export interface PolicyConfigChanged extends EventBase {
   type: "PolicyConfigChanged";
   aggregateType: "Policy";
@@ -362,6 +378,10 @@ export interface NotificationCreated extends EventBase {
   notificationId: string;
   tokenNumber: number;
   patientId: string;
+  /** Which appointment / visit this is about. Optional only because events written before the
+   * field existed still replay without it; every producer sets both. */
+  appointmentId?: string | null;
+  visitId?: string | null;
   kind: string;
   message: string;
 }
@@ -395,6 +415,7 @@ export type Event =
   | InvestigationResulted
   | ReviewStarted
   | ReviewCompleted
+  | DoctorRegistered
   | FeeConfigChanged
   | PolicyConfigChanged
   | LikelyOpdTimeChanged

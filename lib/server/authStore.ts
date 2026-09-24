@@ -51,6 +51,13 @@ function rowToUser(row: { id: string; name: string; email: string; role: string;
 
 export class AuthError extends Error {}
 
+/** Whether a staff account already uses this email. Lets an admin's add-doctor flow fail
+ * *before* it writes the doctor record, instead of leaving a doctor nobody can sign in as. */
+export function isEmailTaken(email: string): boolean {
+  ensureSchema();
+  return Boolean(getDb().prepare("SELECT id FROM users WHERE email = ?").get(email.trim().toLowerCase()));
+}
+
 export function registerUser(params: { name: string; email: string; password: string; role: StaffRole; doctorId: string | null }): StaffUser {
   ensureSchema();
   const email = params.email.trim().toLowerCase();
@@ -59,8 +66,7 @@ export function registerUser(params: { name: string; email: string; password: st
   if (params.password.length < 8) throw new AuthError("Password must be at least 8 characters");
   if (params.role === "DOCTOR" && !params.doctorId) throw new AuthError("Select which doctor this account belongs to");
 
-  const existing = getDb().prepare("SELECT id FROM users WHERE email = ?").get(email);
-  if (existing) throw new AuthError("An account with that email already exists");
+  if (isEmailTaken(email)) throw new AuthError("An account with that email already exists");
 
   const id = `user-${crypto.randomUUID()}`;
   const salt = crypto.randomBytes(16).toString("hex");

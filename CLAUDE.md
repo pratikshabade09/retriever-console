@@ -28,7 +28,8 @@ it never touches state itself.
 - `app/page.tsx` — the public marketing homepage (hospital info, doctor showcase). No auth,
   no booking UI directly — every booking-related link points into `/patient`.
 - `app/patient/login/`, `app/patient/register/` — patient auth, public.
-- `app/login/`, `app/register/` — staff auth, public.
+- `app/login/`, `app/register/` — staff auth, public. `/register` is self-signup for the two
+  non-clinical roles (Reception, Admin) only; a DOCTOR account is created by an admin.
 - `app/patient/` — the logged-in patient area (book, view "my appointments"). Server component
   `page.tsx` calls `requirePatient()`, which redirects to `/patient/login` if unauthenticated,
   then renders `PatientClient.tsx`.
@@ -63,8 +64,9 @@ The product direction changed to "the actual thing, not a demo":
   (`setInterval` in `world.ts`, started at module load).
 - **Real accounts.** `users`/`sessions` tables live in the same SQLite file as the event log
   (`lib/server/authStore.ts`), passwords hashed with Node's built-in `scrypt`. A `DOCTOR`
-  account is bound to one seeded doctor id at registration (`/register`) — the doctor surface
-  has no "pretend to be any doctor" selector anymore, it just uses `user.doctorId`.
+  account is bound to one doctor id — the doctor surface has no "pretend to be any doctor"
+  selector, it just uses `user.doctorId`. Doctors are added by an admin (`RegisterDoctor`
+  command + the account, both from `app/api/staff/doctors/route.ts`), not by self-signup.
 - **Patient accounts, homepage is marketing-only.** `app/page.tsx` is a public hospital
   landing page (no booking UI on it directly). Booking (welcome → symptom triage or doctor
   list → date/slot picker → booking form → confirmation → pay-now-or-later) and "my
@@ -75,6 +77,15 @@ The product direction changed to "the actual thing, not a demo":
   (`lib/server/__tests__/soak.test.ts`) are still here — they're dev-only test tooling, never
   wired to a live route, and they still matter for proving the engine's invariants hold over a
   full simulated day. They are not how the live product gets its data anymore.
+- **Prototype demo logins.** Both login pages offer one-tap sign-in as fixed demo accounts
+  (`lib/server/demoSeed.ts` holds the identities, `lib/server/demoAccounts.ts` creates them on
+  demand, `app/api/demo/accounts` serves them, `components/DemoLogins.tsx` renders them). They
+  are ordinary accounts on the ordinary routes — no demo branch exists inside either auth
+  system. A brand-new event log also gets the demo patient's small history (one closed visit a
+  few days back, one upcoming booking), built by running real Commands through
+  `decide()`/`reduce()` against a scratch state with explicit past timestamps — the same trick
+  `autopilot.ts` uses — and appended only when the log is empty. Delete those five pieces to
+  strip the prototype scaffolding out.
 
 ## Hard constraints (and where they're enforced)
 

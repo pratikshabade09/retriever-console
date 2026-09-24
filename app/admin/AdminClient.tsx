@@ -8,7 +8,7 @@ import { useEngineState } from "@/lib/client/useEngineState";
 import { sendCommand, fetchEvents } from "@/lib/client/api";
 import { describeEvent } from "@/lib/client/describeEvent";
 import { createInitialState, reduce } from "@/lib/engine/reducer";
-import { formatClockLabel } from "@/lib/engine/time";
+import { clockInputValue, formatClockLabel, minutesFromClockInput } from "@/lib/engine/time";
 import type { Event } from "@/lib/engine/events";
 import type { EngineState } from "@/lib/engine/state";
 import type { SessionTemplate } from "@/lib/engine/types";
@@ -82,6 +82,7 @@ export default function AdminClient({ user }: { user: StaffUser }) {
       <MeasuredOutcomes state={state} />
       <div className="columns columns-2">
         <div className="column">
+          <AddDoctorCard />
           <SessionsEditor state={state} run={run} />
           <PolicyEditor state={state} run={run} />
         </div>
@@ -218,6 +219,69 @@ function MeasuredOutcomes({ state }: { state: EngineState }) {
   );
 }
 
+function AddDoctorCard() {
+  const empty = { name: "", specialty: "", room: "", consultationFee: 300, email: "", password: "" };
+  const [form, setForm] = useState(empty);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
+
+  const complete =
+    form.name.trim() !== "" && form.specialty.trim() !== "" && form.room.trim() !== "" && form.email.trim() !== "" && form.password.length >= 8;
+
+  async function submit() {
+    setBusy(true);
+    setMessage(null);
+    try {
+      const res = await fetch("/api/staff/doctors", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setMessage({ ok: false, text: data.error ?? "Could not add the doctor" });
+        return;
+      }
+      setMessage({ ok: true, text: `${form.name} added — they start on Mon–Sat, 9:00 AM–1:00 PM.` });
+      setForm(empty);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="card">
+      <div className="card-title">Add a doctor</div>
+      <div className="dim" style={{ marginBottom: 8 }}>
+        Creates the doctor and their sign-in together. Their week starts as Mon–Sat, 9:00 AM–1:00 PM and can be edited below.
+      </div>
+      <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+        <TextField label="name" value={form.name} onChange={(v) => setForm({ ...form, name: v })} />
+        <TextField label="specialty" value={form.specialty} onChange={(v) => setForm({ ...form, specialty: v })} />
+        <TextField label="room" value={form.room} onChange={(v) => setForm({ ...form, room: v })} />
+        <LabeledNumber label="fee ₹" value={form.consultationFee} onChange={(v) => setForm({ ...form, consultationFee: v })} />
+        <TextField label="login email" value={form.email} onChange={(v) => setForm({ ...form, email: v })} />
+        <TextField label="password" value={form.password} onChange={(v) => setForm({ ...form, password: v })} type="password" />
+      </div>
+      <button className="btn btn-sm btn-primary" style={{ marginTop: 8 }} disabled={!complete || busy} onClick={submit}>
+        {busy ? "Adding…" : "Add doctor"}
+      </button>
+      {message && (
+        <div style={{ marginTop: 6, fontSize: 12, color: message.ok ? "var(--good)" : "var(--bad)" }}>{message.text}</div>
+      )}
+    </div>
+  );
+}
+
+function TextField({ label, value, onChange, type = "text" }: { label: string; value: string; onChange: (v: string) => void; type?: string }) {
+  return (
+    <label style={{ fontSize: 10, color: "var(--text-dim)", display: "flex", flexDirection: "column", gap: 2 }}>
+      {label}
+      <input type={type} style={{ width: 130 }} value={value} onChange={(e) => onChange(e.target.value)} />
+    </label>
+  );
+}
+
 function SessionsEditor({ state, run }: { state: EngineState; run: (c: Record<string, unknown>) => void }) {
   const templates = Object.values(state.sessionTemplates).sort((a, b) => a.doctorId.localeCompare(b.doctorId) || a.weekday.localeCompare(b.weekday));
   return (
@@ -244,8 +308,8 @@ function TemplateRow({ template, doctorName, run }: { template: SessionTemplate;
         {doctorName} · {template.weekday} · window {template.windowIndex}
       </div>
       <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-        <LabeledNumber label="start (min)" value={form.startMinutes} onChange={(v) => setForm({ ...form, startMinutes: v })} />
-        <LabeledNumber label="end (min)" value={form.endMinutes} onChange={(v) => setForm({ ...form, endMinutes: v })} />
+        <TimeField label="start" value={form.startMinutes} onChange={(v) => setForm({ ...form, startMinutes: v })} />
+        <TimeField label="end" value={form.endMinutes} onChange={(v) => setForm({ ...form, endMinutes: v })} />
         <LabeledNumber label="slot len" value={form.slotLengthMinutes} onChange={(v) => setForm({ ...form, slotLengthMinutes: v })} />
         <LabeledNumber label="protected" value={form.initialProtected} onChange={(v) => setForm({ ...form, initialProtected: v })} />
         <LabeledNumber label="min protected" value={form.minProtected} onChange={(v) => setForm({ ...form, minProtected: v })} />
@@ -291,6 +355,25 @@ function LabeledNumber({ label, value, onChange }: { label: string; value: numbe
     <label style={{ fontSize: 10, color: "var(--text-dim)", display: "flex", flexDirection: "column", gap: 2 }}>
       {label}
       <input type="number" style={{ width: 70 }} value={value} onChange={(e) => onChange(Number(e.target.value))} />
+    </label>
+  );
+}
+
+/** A time-of-day field. Reads and writes as a clock (9:00 AM), stores minutes from midnight —
+ * the conversion lives in lib/engine/time.ts, so the template keeps its plain number. */
+function TimeField({ label, value, onChange }: { label: string; value: number; onChange: (v: number) => void }) {
+  return (
+    <label style={{ fontSize: 10, color: "var(--text-dim)", display: "flex", flexDirection: "column", gap: 2 }}>
+      {label}
+      <input
+        type="time"
+        style={{ width: 96 }}
+        value={clockInputValue(value)}
+        onChange={(e) => {
+          const minutes = minutesFromClockInput(e.target.value);
+          if (minutes !== null) onChange(minutes);
+        }}
+      />
     </label>
   );
 }

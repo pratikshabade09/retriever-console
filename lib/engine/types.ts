@@ -180,6 +180,11 @@ export interface NotificationRow {
   ts: number;
   tokenNumber: number;
   patientId: string;
+  /** What this is actually about. A token number repeats every clinic day, so it cannot tell
+   * one booking from another — these can. A notification about a booked appointment carries
+   * `appointmentId`; one about a walk-in carries `visitId`. */
+  appointmentId: string | null;
+  visitId: string | null;
   kind: string;
   message: string;
   delivered: boolean;

@@ -3,6 +3,7 @@
 import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
+import DemoLogins from "@/components/DemoLogins";
 
 function PatientLoginForm() {
   const router = useRouter();
@@ -13,15 +14,14 @@ function PatientLoginForm() {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  async function onSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  async function signIn(nextEmail: string, nextPassword: string) {
     setError(null);
     setSubmitting(true);
     try {
       const res = await fetch("/api/patient/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email: nextEmail, password: nextPassword }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -33,6 +33,18 @@ function PatientLoginForm() {
     } finally {
       setSubmitting(false);
     }
+  }
+
+  function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    void signIn(email, password);
+  }
+
+  /** Prototype shortcut: fill the form so it's obvious whose account is being used, then go. */
+  function onDemoSignIn(demoEmail: string, demoPassword: string) {
+    setEmail(demoEmail);
+    setPassword(demoPassword);
+    void signIn(demoEmail, demoPassword);
   }
 
   return (
@@ -49,7 +61,9 @@ function PatientLoginForm() {
 
         {error && <div className="glass-error">{error}</div>}
 
-        <form onSubmit={onSubmit}>
+        <DemoLogins audience="patient" onSignIn={onDemoSignIn} disabled={submitting} />
+
+        <form onSubmit={onSubmit} style={{ marginTop: '10px' }}>
           <div className="glass-field">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#16241a" strokeWidth="2">
               <rect x="3" y="5" width="18" height="14" rx="2" />

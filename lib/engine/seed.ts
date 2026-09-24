@@ -1,7 +1,11 @@
-// Fixed configuration data: doctors, their recurring session templates, fees, walk-in history,
-// and the capacity policy. This is static seed data, not event-sourced state — the templates
-// describe recurring *shape*; the DoctorSession/Slot rows it produces are real state, folded
-// from a SessionOpened event (see sessionSlots.ts and reducer.ts).
+// Initial configuration data: the doctors the clinic opens with, their recurring session
+// templates, fees, walk-in history, and the capacity policy. This is static seed data, not
+// event-sourced state — the templates describe recurring *shape*; the DoctorSession/Slot rows
+// they produce are real state, folded from a SessionOpened event (see sessionSlots.ts and
+// reducer.ts).
+//
+// It is the *starting* set, not the whole set: admin can add a doctor at runtime (the
+// RegisterDoctor command), and a doctor added that way starts on DEFAULT_DOCTOR_SCHEDULE below.
 
 import type {
   CapacityPolicyConfig,
@@ -60,6 +64,37 @@ export const SESSION_TEMPLATES: SessionTemplate[] = [
     template("khan", day, 1, 15 * 60, 17 * 60, 20, 3, 1),
   ]),
 ];
+
+/** What a newly registered doctor's week looks like until an admin reconfigures it: Monday to
+ * Saturday, one 09:00–13:00 window of 20-minute slots, with a small walk-in reserve. A doctor
+ * with no template at all could never have a slot opened, so every doctor needs a week. */
+export const DEFAULT_DOCTOR_SCHEDULE = {
+  weekdays: MON_TO_SAT,
+  startMinutes: 9 * 60,
+  endMinutes: 13 * 60,
+  slotLengthMinutes: 20,
+  initialProtected: 2,
+  minProtected: 1,
+};
+
+/** A new doctor's recurring sessions, built with the same id convention as the seeded ones
+ * (`${doctorId}-${weekday}-${windowIndex}`) so OpenSession and the admin Sessions editor find
+ * them exactly like any other template. */
+export function defaultTemplatesFor(doctorId: string): SessionTemplate[] {
+  const schedule = DEFAULT_DOCTOR_SCHEDULE;
+  return schedule.weekdays.map((weekday) =>
+    template(
+      doctorId,
+      weekday,
+      0,
+      schedule.startMinutes,
+      schedule.endMinutes,
+      schedule.slotLengthMinutes,
+      schedule.initialProtected,
+      schedule.minProtected,
+    ),
+  );
+}
 
 export const WALK_IN_RATES: WalkInRatePoint[] = [
   { doctorId: "sharma", hour: 9, ratePerHour: 0.4 },

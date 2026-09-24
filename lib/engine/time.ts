@@ -57,3 +57,33 @@ export function formatClockLabel(absoluteMinutes: number): string {
   const hour12 = hour24 % 12 === 0 ? 12 : hour24 % 12;
   return `${hour12}:${String(minute).padStart(2, "0")} ${period}`;
 }
+
+/** "09:00", the value an <input type="time"> reads and writes, as minutes from midnight — the
+ * same minute-of-day convention a SessionTemplate stores. Null if it isn't a clock time. */
+export function minutesFromClockInput(value: string): number | null {
+  const match = /^(\d{1,2}):(\d{2})$/.exec(value.trim());
+  if (!match) return null;
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (hours > 23 || minutes > 59) return null;
+  return hours * 60 + minutes;
+}
+
+/** The inverse of minutesFromClockInput: minutes from midnight to the "HH:MM" an
+ * <input type="time"> expects. The input itself renders that in the viewer's locale — 9:00 AM
+ * in a 12-hour one — so the stored minutes stay a plain number while the field reads as a clock. */
+export function clockInputValue(minutesOfDay: number): string {
+  const wrapped = ((Math.round(minutesOfDay) % 1440) + 1440) % 1440;
+  return `${String(Math.floor(wrapped / 60)).padStart(2, "0")}:${String(wrapped % 60).padStart(2, "0")}`;
+}
+
+const WEEKDAY_LABELS: Record<Weekday, string> = { SUN: "Sun", MON: "Mon", TUE: "Tue", WED: "Wed", THU: "Thu", FRI: "Fri", SAT: "Sat" };
+const MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/** "Sat 19 Sep" — the day half of a timestamp, for anywhere a slot label alone is ambiguous
+ * (two clinic days both have a 9:00 AM). Locale-free, like the rest of this module. */
+export function formatDayLabel(absoluteMinutes: number): string {
+  const day = Math.floor(absoluteMinutes / 1440);
+  const [, month, date] = dayNumberToDate(day).split("-");
+  return `${WEEKDAY_LABELS[weekdayFromDayNumber(day)]} ${Number(date)} ${MONTH_LABELS[Number(month) - 1]}`;
+}

@@ -225,6 +225,58 @@ input {
   margin-bottom: 14px;
 }
 
+/* prototype-only one-tap demo sign-in (components/DemoLogins.tsx) */
+.glass-demo {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--glass-border);
+}
+
+.glass-demo-title {
+  text-align: center;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.glass-demo-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  padding: 9px 12px;
+  border-radius: 9px;
+  border: 1px solid var(--glass-border);
+  background: rgba(232, 238, 233, 0.06);
+  color: #eaf4ee;
+  text-align: left;
+  cursor: pointer;
+}
+
+.glass-demo-btn:hover {
+  background: rgba(232, 238, 233, 0.12);
+}
+
+.glass-demo-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.glass-demo-role {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.glass-demo-cred {
+  font-size: 10px;
+  color: #9fb8a7;
+}
+
 /* ---------- top bar ---------- */
 
 .topbar {

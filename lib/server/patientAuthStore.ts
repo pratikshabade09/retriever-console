@@ -54,27 +54,46 @@ export class PatientAuthError extends Error {}
 export function registerPatientAccount(params: { name: string; email: string; phone: string; password: string }): PatientAccount {
   ensureSchema();
   const email = params.email.trim().toLowerCase();
-  if (!params.name.trim()) throw new PatientAuthError("Name is required");
-  if (!email.includes("@")) throw new PatientAuthError("A valid email is required");
-  if (!params.phone.trim()) throw new PatientAuthError("Phone number is required");
-  if (params.password.length < 8) throw new PatientAuthError("Password must be at least 8 characters");
-
-  const existing = getDb().prepare("SELECT id FROM patient_accounts WHERE email = ?").get(email);
-  if (existing) throw new PatientAuthError("An account with that email already exists");
+  validateNewAccount({ email, name: params.name, phone: params.phone, password: params.password });
 
   const events = dispatch({ type: "RegisterPatient", name: params.name.trim(), phone: params.phone.trim(), actorRole: "PATIENT", actorId: "patient-portal" });
   const registered = events.find((e) => e.type === "PatientRegistered");
   const patientId = registered && "patientId" in registered ? registered.patientId : null;
   if (!patientId) throw new PatientAuthError("Could not create patient record");
 
+  return insertAccount({ name: params.name, email, phone: params.phone, password: params.password, patientId });
+}
+
+/** Binds a new account to a Patient record that already exists in the event log. Ordinary
+ * registration always goes through registerPatientAccount above (which creates the Patient
+ * itself); this exists for demo-account seeding, where the Patient is part of seeded history. */
+export function createPatientAccountForPatient(params: { name: string; email: string; phone: string; password: string; patientId: string }): PatientAccount {
+  ensureSchema();
+  const email = params.email.trim().toLowerCase();
+  validateNewAccount({ email, name: params.name, phone: params.phone, password: params.password });
+  return insertAccount({ name: params.name, email, phone: params.phone, password: params.password, patientId: params.patientId });
+}
+
+function validateNewAccount(params: { email: string; name: string; phone: string; password: string }): void {
+  if (!params.name.trim()) throw new PatientAuthError("Name is required");
+  if (!params.email.includes("@")) throw new PatientAuthError("A valid email is required");
+  if (!params.phone.trim()) throw new PatientAuthError("Phone number is required");
+  if (params.password.length < 8) throw new PatientAuthError("Password must be at least 8 characters");
+  const existing = getDb().prepare("SELECT id FROM patient_accounts WHERE email = ?").get(params.email);
+  if (existing) throw new PatientAuthError("An account with that email already exists");
+}
+
+function insertAccount(params: { name: string; email: string; phone: string; password: string; patientId: string }): PatientAccount {
   const id = `patient-account-${crypto.randomUUID()}`;
   const salt = crypto.randomBytes(16).toString("hex");
   const hash = hashPassword(params.password, salt);
+  const name = params.name.trim();
+  const phone = params.phone.trim();
   getDb()
     .prepare("INSERT INTO patient_accounts (id, name, email, phone, password_hash, password_salt, patient_id) VALUES (?, ?, ?, ?, ?, ?, ?)")
-    .run(id, params.name.trim(), email, params.phone.trim(), hash, salt, patientId);
+    .run(id, name, params.email, phone, hash, salt, params.patientId);
 
-  return { id, name: params.name.trim(), email, phone: params.phone.trim(), patientId };
+  return { id, name, email: params.email, phone, patientId: params.patientId };
 }
 
 export function verifyPatientLogin(email: string, password: string): PatientAccount {

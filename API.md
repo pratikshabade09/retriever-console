@@ -92,6 +92,10 @@ curl -X POST http://localhost:3000/api/public/cancel -H "Content-Type: applicati
 { "ok": true }
 ```
 
+A token number is only unique **within one clinic day**, so `/pay`, `/cancel` and
+`/reschedule` all also accept `"appointmentId"` — the id `POST /api/public/book` returns. The
+logged-in patient UI sends the id; a bot that only holds a token number can keep sending that.
+
 ---
 
 ## `POST /api/public/reschedule`
@@ -137,6 +141,33 @@ curl "http://localhost:3000/api/public/notifications/1?since=0"
   { "ts": 29834940, "kind": "opd_time_changed", "message": "The doctor is running late. Your updated likely OPD time is 10:05 AM." },
   { "ts": 29835180, "kind": "approaching_queue", "message": "You are approaching the queue. There are 4 patients ahead of you. Please be ready." }
 ]
+```
+
+A token number is only unique within one clinic day, so the token-only form can also match an
+older booking that held the same token. Pass the `appointmentId` returned by
+`POST /api/public/book` to pin the feed to exactly one booking:
+
+```bash
+curl "http://localhost:3000/api/public/notifications/1?since=0&appointmentId=appt-1"
+```
+
+---
+
+## `GET /api/patient/notifications?since=<ts>`
+
+The signed-in patient's own updates — the same three kinds as above. Scoped to the session's
+patient, so it can never show anyone else's, or an older booking that reused the token number.
+Each row carries the booking it belongs to (`appointmentId` for a booking, `visitId` for a
+walk-in), which is what the patient area groups by.
+
+```bash
+curl -b cookies.txt "http://localhost:3000/api/patient/notifications?since=0"
+```
+
+```json
+{ "notifications": [
+  { "ts": 29835180, "kind": "approaching_queue", "appointmentId": "appt-1", "visitId": "visit-1", "message": "You are approaching the queue. There are 4 patients ahead of you. Please be ready." }
+] }
 ```
 
 ---

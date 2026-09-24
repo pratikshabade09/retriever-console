@@ -66,6 +66,11 @@ export function describeEvent(event: Event): { label: string; detail: string } {
       return { label: "Review completed", detail: event.visitId };
     case "FeeConfigChanged":
       return { label: "Fee changed", detail: `${event.doctorId} → ₹${event.fee}` };
+    case "DoctorRegistered":
+      return {
+        label: "Doctor added",
+        detail: `${event.name} (${event.specialty}, ${event.room}) at ₹${event.consultationFee}, ${event.templates.length} weekly sessions`,
+      };
     case "PolicyConfigChanged":
       return { label: "Policy changed", detail: JSON.stringify(event.patch) };
     case "LikelyOpdTimeChanged":

@@ -6,6 +6,7 @@
 import type { EngineState } from "./state";
 
 const COUNTERS: Record<string, (state: EngineState) => number> = {
+  doctor: (s) => Object.keys(s.doctors).length,
   patient: (s) => Object.keys(s.patients).length,
   appt: (s) => Object.keys(s.appointments).length,
   visit: (s) => Object.keys(s.visits).length,

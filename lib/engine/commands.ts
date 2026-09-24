@@ -51,6 +51,16 @@ export interface RegisterPatient extends CommandBase {
   phone: string;
 }
 
+/** Brings a new doctor into the clinic: a name on the board, a default week of sessions, and a
+ * consultation fee effective from `now`. Admin-only — see authorize.ts. */
+export interface RegisterDoctor extends CommandBase {
+  type: "RegisterDoctor";
+  name: string;
+  specialty: string;
+  room: string;
+  consultationFee: number;
+}
+
 export interface BookAppointment extends CommandBase {
   type: "BookAppointment";
   patientId: string;
@@ -219,6 +229,7 @@ export type Command =
   | ResumeSession
   | EndSession
   | ReconfigureSession
+  | RegisterDoctor
   | RegisterPatient
   | BookAppointment
   | CancelAppointment

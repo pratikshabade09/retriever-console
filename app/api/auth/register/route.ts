@@ -3,24 +3,22 @@ import { z } from "zod";
 import { registerUser, createSession, AuthError } from "@/lib/server/authStore";
 import { SESSION_COOKIE } from "@/lib/server/session";
 import { sessionCookieOptions } from "@/lib/server/cookieOptions";
-import { getState } from "@/lib/server/world";
 import { jsonError } from "@/lib/server/http";
 
+// Self-signup, for the two non-clinical staff roles. A DOCTOR account is not self-created: it
+// has to be bound to a doctor the clinic actually has, so an admin adds it alongside the doctor
+// itself (see app/api/staff/doctors/route.ts).
 const body = z.object({
   name: z.string().min(1),
   email: z.string().min(1),
   password: z.string().min(1),
-  role: z.enum(["RECEPTION", "DOCTOR", "ADMIN"]),
-  doctorId: z.string().nullable().optional(),
+  role: z.enum(["RECEPTION", "ADMIN"]),
 });
 
 export async function POST(req: NextRequest) {
   try {
     const input = body.parse(await req.json());
-    if (input.role === "DOCTOR" && (!input.doctorId || !getState().doctors[input.doctorId])) {
-      return jsonError("Select a valid doctor for this account", 400);
-    }
-    const user = registerUser({ ...input, doctorId: input.role === "DOCTOR" ? (input.doctorId ?? null) : null });
+    const user = registerUser({ ...input, doctorId: null });
     const token = createSession(user.id);
     const res = NextResponse.json({ user });
     res.cookies.set(SESSION_COOKIE, token, sessionCookieOptions());

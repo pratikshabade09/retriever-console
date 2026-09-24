@@ -9,9 +9,13 @@ export async function GET() {
   if (!patient) return jsonError("Not signed in", 401);
   const views = appointmentsForPatient(getState(), patient.patientId, getClock().now);
   const appointments = views.map((v) => ({
+    appointmentId: v.appointmentId,
+    visitId: v.visitId,
     tokenNumber: v.tokenNumber,
     status: v.status,
     doctorName: v.doctorName,
+    dayLabel: v.dayLabel,
+    dayPassed: v.dayPassed,
     slotLabel: v.slotLabel,
     likelyOpdTime: v.likelyOpdTimeLabel,
     patientsAhead: v.patientsAhead,

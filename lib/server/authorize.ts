@@ -16,7 +16,12 @@ const RECEPTION_CANNOT: ReadonlySet<Command["type"]> = new Set([
   "SetFollowUp",
 ]);
 
-const ADMIN_ONLY: ReadonlySet<Command["type"]> = new Set(["ReconfigureSession", "ChangeFeeConfig", "ChangePolicyConfig"]);
+const ADMIN_ONLY: ReadonlySet<Command["type"]> = new Set([
+  "RegisterDoctor",
+  "ReconfigureSession",
+  "ChangeFeeConfig",
+  "ChangePolicyConfig",
+]);
 
 export function authorize(command: Command): void {
   if (command.actorRole === "RECEPTION" && RECEPTION_CANNOT.has(command.type)) {
